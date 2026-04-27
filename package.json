@@ -1,0 +1,26 @@
+{
+  "name": "editor-together-serve",
+  "version": "1.0.0",
+  "description": "REST + WebSocket server for a collaborative editor (Express + ws).",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "@hocuspocus/extension-database": "^4.0.0",
+    "@hocuspocus/server": "^4.0.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.5.0",
+    "morgan": "^1.10.0",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.3",
+    "yjs": "^13.6.30"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
