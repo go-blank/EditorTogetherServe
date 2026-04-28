@@ -20,7 +20,8 @@ import { signToken, nowIso, authMiddleware } from '../middleware/auth.js'
     if (!user) return res.status(403).json({ error: "用户名或密码错误" });
 
     const token = signToken({
-      sub: username,
+      sub:  user._id,
+      userId: user._id,
       username: user.username,
       role: user.role
     });
@@ -44,7 +45,7 @@ import { signToken, nowIso, authMiddleware } from '../middleware/auth.js'
     await user.save(); // 保存到 MongoDB
 
     const token = signToken({
-      sub: username,
+      sub:  user._id,
       username: user.username,
       role: user.role
     });

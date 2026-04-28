@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import { setupWebSocket } from './hocuspocus-server.js';
 import { createUserApiRouter } from "./apiRoutes/user.js";
+import {createDocumentApiRouter} from "./apiRoutes/document.js"
 
 // 环境变量配置
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -41,7 +42,10 @@ app.use(
   "/api",
   createUserApiRouter()
 );
-
+app.use(
+  "/document",
+  createDocumentApiRouter()
+);
 
 // 404 handler (JSON)
 app.use((req, res) => {
@@ -53,9 +57,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal server error", requestId: req?.id });
 });
 
-setupWebSocket(server); 
 
 const server = http.createServer(app);
+
+setupWebSocket(); 
 
 server.listen(PORT, () => {
   log(`Server listening on http://localhost:${PORT}`);

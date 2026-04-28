@@ -1,23 +1,34 @@
 import { Server } from '@hocuspocus/server';
-import { MongoDB } from '@hocuspocus/extension-mongodb';
+import { Database } from '@hocuspocus/extension-database'
 import { verifyToken } from './middleware/auth.js'
 import Document from './models/Document.js';
 import DocumentMember from './models/DocumentMember.js';
 
 // 创建 Hocuspocus 服务器
-const hocuspocusServer = Server.configure({
-  port: 3001,  // WebSocket 端口，可以和 HTTP 不同
-
+const hocuspocusServer =  new Server({
+  port: 3001,
   // 扩展插件
   extensions: [
-    // MongoDB 持久化扩展（自动保存 Yjs 数据）
-    new MongoDB({
-      connectionURL: process.env.MONGODB_URL || 'mongodb://localhost:27017',
-      databaseName: process.env.DB_NAME || 'EditorTogether',
-      flushSize: 100,           // 每 100 个操作刷新一次
-      flushInterval: 2000,      // 或每 2 秒刷新一次
-      // 注意：Hocuspocus 会自动管理版本，不需要我们手动处理快照
-    }),
+    new Database({
+      fetch: async ({ documentName }) => {
+        const doc = await Document.findOne({ _id: documentName });
+        return doc?.yjs_data ? new Uint8Array(doc.yjs_data.buffer) : null;
+      },
+
+
+      store: async ({ documentName, state }) => {
+        const buffer = Buffer.from(state);
+        await Document.findByIdAndUpdate(
+          documentName,
+          {
+            yjs_data: buffer,
+            updated_at: new Date()
+          },
+          { upsert: false }  
+        );
+      }
+
+    })
 
   ],
 
@@ -95,19 +106,23 @@ const hocuspocusServer = Server.configure({
 
   // 用户连接时的自定义处理
   onConnect: async (data) => {
-    const { context, connection,request } = data;
 
-    // 可以在这里添加自定义的 connection 扩展
-    connection.readOnly = false;  // 允许读写
+    const { context, connection, request } = data;
+
+    console.log('[onConnect] request.url:', request.url);
 
     const url = new URL(request.url, `http://${request.headers.host}`);
     const token = url.searchParams.get('token');
 
+    console.log("拿到的token是",token)
+
     const user = verifyToken(token);
     if (!user) {
-      connection.readOnly = true;
+      // connection.readOnly = true;
       throw new Error('无效token');
     }
+
+    console.log("用户信息是",user)
 
     // 将用户信息附加到 context
     context.userId = user.userId;
@@ -139,19 +154,11 @@ const hocuspocusServer = Server.configure({
 });
 
 // 启动 WebSocket 服务器
-function setupWebSocket(server) {
-  // 如果想把 WebSocket 挂载到已有的 HTTP 服务器上
-  if (server) {
-    hocuspocusServer.configure({
-      server,  // 复用已有的 HTTP 服务器
-      port: undefined  // 不指定端口，使用 HTTP 服务器的端口
-    });
-  }
-
+function setupWebSocket() {
   hocuspocusServer.listen();
   console.log(`Hocuspocus WebSocket 服务器已启动`);
 
   return hocuspocusServer;
 }
 
-module.exports = { setupWebSocket, hocuspocusServer };
+export { setupWebSocket, hocuspocusServer };
