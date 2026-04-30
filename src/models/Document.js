@@ -14,9 +14,20 @@ const documentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Buffer,  // 存储 Yjs 的二进制数据
     required: false
   },
-  created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  created_at: { type: Date, default: Date.now },
-  updated_at: { type: Date, default: Date.now }
+   // 存储用户 ID
+   created_by: { type: String, required: true, index: true },
+   updated_by: { type: String, index: true },
+ 
+   // 冗余存储用户名（用于性能）
+   created_by_name: { type: String, required: true },
+   updated_by_name: { type: String },
+   
+   created_at: { type: Date, default: Date.now },
+   updated_at: { type: Date, default: Date.now },
+
+  // created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // created_at: { type: Date, default: Date.now },
+  // updated_at: { type: Date, default: Date.now }
 });
 
 // documentSchema.pre('save', function(next) {

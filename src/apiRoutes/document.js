@@ -13,7 +13,7 @@ export function createDocumentApiRouter() {
   router.post('/ADDdocuments', authMiddleware, async (req, res) => {
     try {
       const { workspace_id, title, initialContent = '' } = req.body;
-      const userId = req.user.userId;
+      const {userId,username} = req.user;
       // 生成文档 ID（可以使用 UUID 或 MongoDB ObjectId）
       const documentId = new mongoose.Types.ObjectId().toString();
 
@@ -22,7 +22,8 @@ export function createDocumentApiRouter() {
         _id: documentId,
         workspace_id,
         title,
-        created_by: userId
+        created_by: userId,
+        created_by_name:username
       });
 
       await document.save();
@@ -49,7 +50,8 @@ export function createDocumentApiRouter() {
           id: documentId,
           title: document.title,
           workspace_id: document.workspace_id,
-          created_at: document.created_at
+          created_by_name: document.created_by_name,
+          created_by:document.created_by
         }
       });
     } catch (error) {
@@ -60,7 +62,7 @@ export function createDocumentApiRouter() {
   // ========== 获取文档列表 ==========
   router.get('/GETdocumentsList', authMiddleware, async (req, res) => {
     try {
-      const userId = req.user.userId;
+      const {userId,username} = req.user;
       const { workspace_id, status = 'active', page = 1, limit = 20 } = req.query;
 
       // 查询用户有权限的文档
