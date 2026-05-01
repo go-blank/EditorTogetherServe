@@ -38,14 +38,10 @@ app.use(
   })
 );
 
-app.use(
-  "/api",
-  createUserApiRouter()
-);
-app.use(
-  "/document",
+app.use("/api", [
+  createUserApiRouter(),
   createDocumentApiRouter()
-);
+]);
 
 // 404 handler (JSON)
 app.use((req, res) => {
