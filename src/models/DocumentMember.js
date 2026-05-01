@@ -1,21 +1,23 @@
 import mongoose from "mongoose";
 
 const documentMemberSchema = new mongoose.Schema({
-  document_id: { 
+  document_id: {
     type: String,                          // 对应 Document 的 _id (String 类型)
-    ref: 'Document', 
+    ref: 'Document',
     required: true,
     index: true                            // 添加索引，便于按文档查询成员
   },
-  user_id: { 
+  title: { type: String, required: true },
+  user_id: {
     type: mongoose.Schema.Types.ObjectId,  // 对应 User 的 _id
-    ref: 'User', 
+    ref: 'User',
     required: true,
     index: true                            // 添加索引，便于按用户查询文档列表
   },
-  joined_at: { 
-    type: Date, 
-    default: Date.now 
+  username: { type: String, required: true },
+  joined_at: {
+    type: Date,
+    default: Date.now
   }
 });
 

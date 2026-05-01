@@ -4,23 +4,25 @@ import { verifyToken } from './middleware/auth.js'
 import Document from './models/Document.js';
 import DocumentMember from './models/DocumentMember.js';
 
+import debounce from 'debounce'
+
+const debouncedUpdate = debounce(async (documentName, user) => {
+  try {
+    // 直接更新你的 Document 表
+    await Document.findByIdAndUpdate(documentName, {
+      updated_by: user.userId,             // 用户ID
+      updated_by_name: user.username,     // 用户名
+      updated_at: Date.now()             // 更新时间
+    });
+    console.log('✅ 已更新最后修改人：', user.username);
+  } catch (err) {
+    console.error('更新失败', err);
+  }
+}, 1000);
+
 // 创建 Hocuspocus 服务器
 const hocuspocusServer = new Server({
   port: 3001,
-
-   onAuthenticate:async(data)=> { 
-    const { token } = data;
-    console.log("拿到的token是", token)
-
-    const user = verifyToken(token);
-    if (!user) {
-      connectionConfig.readOnly = true;
-      throw new Error('无效token');
-    }
-    return {
-      user
-    };
-  },
   // 扩展插件
   extensions: [
     new Database({
@@ -46,7 +48,7 @@ const hocuspocusServer = new Server({
             documentName,
             {
               yjs_data: state,
-              updated_at: new Date(),
+              updated_at: Date.now(),
               updated_by: lastContext.userId,
               updated_by_name: lastContext.username
             },
@@ -60,29 +62,45 @@ const hocuspocusServer = new Server({
 
   ],
 
+  onAuthenticate: async (data) => {
+
+    const { token, context } = data;
+    console.log("拿到的token是", token)
+
+    const user = verifyToken(token);
+    if (!user) {
+      connectionConfig.readOnly = true;
+      throw new Error('无效token');
+    }
+    return {
+      user
+    }
+  },
+
   // 文档加载前的钩子 - 验证权限
   onLoadDocument: async (data) => {
     console.log("用户开始加载文档")
+
     const { documentName, context } = data;
-    console.log("用户开始解构数据")
+    console.log("context", context.user)
+    console.log("documentName", documentName)
     // documentName 就是你的 documentId
     const documentId = documentName;
-    const userId = context.userId;
+    const userId = context.user?.userId;
 
-    console.log(`用户 ${context.username} 尝试加载文档 ${documentId}`);
+    console.log(`用户 ${context.user?.username} 尝试加载文档 ${documentId}`);
 
-    // 从数据库验证用户是否有权限访问该文档
-    const hasAccess = await DocumentMember.exists({
-      document_id: documentId,
-      user_id: userId
+    const ifExists = await Document.findOne({
+      _id: documentId,
+      status: { $ne: 'deleted' } // 不等于 deleted
     });
 
-    if (!hasAccess) {
-      throw new Error('无权限访问该文档');
+    if (!ifExists) {
+      throw new Error('文档已被删除');
     }
 
     // 可以在这里记录文档访问日志
-    console.log(`用户 ${context.username} 成功加载文档 ${documentId}`);
+    console.log(`用户 ${context.user?.username} 成功加载文档 ${documentId}`);
 
     return data;  // 继续加载文档
   },
@@ -121,33 +139,18 @@ const hocuspocusServer = new Server({
     return data;
   },
 
-  // 文档变更时的钩子（可用于实时通知）
-  onUpdate: async (data) => {
-    const { documentName } = data;
+  onChange: async (data) => {
+    const { documentName, context } = data;
 
-    // 可选：更新数据库中的 updated_at 字段
-    await Document.findByIdAndUpdate(documentName, {
-      updated_at: new Date()
-    }).catch(err => console.error('更新 updated_at 失败:', err));
+    const user = context.user;
+    if (!user) return;
 
-    // 可选：广播给其他用户（Hocuspocus 会自动处理，这里只是做额外记录）
-    // console.log(`文档 ${documentName} 有更新`);
+    debouncedUpdate(documentName, user);
   },
 
   // 用户连接时的自定义处理
   onConnect: async (data) => {
-    console.log("data中的实际属性", Object.getOwnPropertyNames(data))
-
-    const { context, requestParameters, connectionConfig } = data;
-
-    // const token = requestParameters?.get('token');
-    console.log("context", context)
-    // 将用户信息附加到 context
-    context.userId = user.userId;
-    context.username = user.username;
-    context.role = user.role;
-
-    console.log(`用户 ${context.username} 连接 `);
+    console.log("用户", data.context.user?.username, "已连接上", data.documentName)
     return data;
 
   },
@@ -155,7 +158,7 @@ const hocuspocusServer = new Server({
   // 用户断开连接
   onDisconnect: async (data) => {
     const { context } = data;
-    console.log(`用户 ${context.username} 已断开`);
+    console.log(`用户 ${context.user?.username} 已断开`);
   },
 
   // 配置心跳间隔（保持连接）
