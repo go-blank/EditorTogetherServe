@@ -10,18 +10,14 @@ export function signToken(payload) {
 
 
 export function verifyToken(token) {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    console.log("aaaaaaaaaaa",decoded)
-    return {
-      userId: decoded.userId || decoded.sub,
-      username: decoded.username,
-      role: decoded.role,
-      department: decoded.department
-    };
-  } catch (error) {
-    return null;
-  }
+  const decoded = jwt.verify(token, JWT_SECRET);
+  console.log("aaaaaaaaaaa", decoded)
+  return {
+    userId: decoded.userId || decoded.sub,
+    username: decoded.username,
+    role: decoded.role,
+    department: decoded.department
+  };
 }
 
 export function getBearerToken(req) {
@@ -46,12 +42,6 @@ export function authMiddleware(req, res, next) {
       });
     }
     const decoded = verifyToken(token);
-    if (!decoded) {
-      return res.status(401).json({
-        error: "无效的令牌",
-        code: "INVALID_TOKEN"
-      });
-    }
     req.user = decoded;
 
     next();

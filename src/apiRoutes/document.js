@@ -200,6 +200,32 @@ export function createDocumentApiRouter() {
     }
   });
 
+//恢复回收站文档
+  router.put('/Restoredocuments/:id', authMiddleware, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+
+      const document = await Document.findById(id);
+      if (!document) {
+        return res.status(404).json({ code: 404, error: '未找到文档' });
+      }
+
+      document.status = 'active';
+      await document.save();
+
+      // 注意：Hocuspocus 中的数据不会立即删除，可以保留用于恢复
+      // 如果需要彻底删除，可以调用 hocuspocusServer.destroyDocument(id)
+
+      res.json({
+        code: 200,
+        message: '文档已恢复'
+      });
+    } catch (error) {
+      res.status(500).json({ code: 500, error: error.message });
+    }
+  });
+
   // ========== 彻底删除文档（物理删除） ==========
   router.delete('/documents/:id/permanent', authMiddleware, async (req, res) => {
     try {
@@ -215,9 +241,6 @@ export function createDocumentApiRouter() {
       if (document.created_by.toString() !== userId) {
         return res.status(403).json({ code: 403, error: '只有创建者可以删除文档' });
       }
-
-      // 从 Hocuspocus 中删除文档数据
-      await hocuspocusServer.destroyDocument(id);
 
       // 删除数据库记录
       await Document.findByIdAndDelete(id);

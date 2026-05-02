@@ -90,18 +90,6 @@ const hocuspocusServer = new Server({
 
     console.log(`用户 ${context.user?.username} 尝试加载文档 ${documentId}`);
 
-    const ifExists = await Document.findOne({
-      _id: documentId,
-      status: { $ne: 'deleted' } // 不等于 deleted
-    });
-
-    if (!ifExists) {
-      throw new Error('文档已被删除');
-    }
-
-    // 可以在这里记录文档访问日志
-    console.log(`用户 ${context.user?.username} 成功加载文档 ${documentId}`);
-
     return data;  // 继续加载文档
   },
 
@@ -150,9 +138,17 @@ const hocuspocusServer = new Server({
 
   // 用户连接时的自定义处理
   onConnect: async (data) => {
-    console.log("用户", data.context.user?.username, "已连接上", data.documentName)
-    return data;
+    const { documentName, context } = data
+    console.log("用户", context.user?.username, "已连接上", documentName)
+    const ifExists = await Document.findOne({
+      _id: documentName,
+      status: { $ne: 'deleted' } // 不等于 deleted
+    });
 
+    if (!ifExists) {
+      return Promise.reject('文档已被删除')
+    }
+    return data;
   },
 
   // 用户断开连接
