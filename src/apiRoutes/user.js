@@ -67,6 +67,27 @@ export function createUserApiRouter() {
     }
   });
 
+  //返回用户信息
+  router.get("/auth/getUserInfo", authMiddleware, async (req, res) => {
+    try {
+      const { userId } = req.user;
+      const user = await User.findById({_id:userId})
+      res.json({
+        code: 200,
+        data: {
+          username: user.username || '测试',
+          role: user.role || '管理员',
+          department: user.department || '研发组',
+          email: user.email || '1234543298@qq.com',
+        }
+
+      });
+    }
+    catch (error) {
+      res.status(500).json({ code: 500, error: error.message });
+    }
+  })
+
   // 验证token
   router.get("/auth/verify", authMiddleware, (req, res) => {
     res.json({ ok: true, user: req.user });
