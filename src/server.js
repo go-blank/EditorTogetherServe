@@ -5,7 +5,8 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import { setupWebSocket } from './hocuspocus-server.js';
 import { createUserApiRouter } from "./apiRoutes/user.js";
-import {createDocumentApiRouter} from "./apiRoutes/document.js"
+import { createDocumentApiRouter } from "./apiRoutes/document.js"
+import { deepSeekApiRouter } from "./apiRoutes/deepseek.js"
 
 // 环境变量配置
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -40,7 +41,8 @@ app.use(
 
 app.use("/api", [
   createUserApiRouter(),
-  createDocumentApiRouter()
+  createDocumentApiRouter(),
+  deepSeekApiRouter()
 ]);
 
 // 404 handler (JSON)
@@ -56,7 +58,7 @@ app.use((err, req, res, next) => {
 
 const server = http.createServer(app);
 
-setupWebSocket(); 
+setupWebSocket();
 
 server.listen(PORT, () => {
   log(`Server listening on http://localhost:${PORT}`);
