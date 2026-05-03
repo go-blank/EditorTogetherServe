@@ -5,7 +5,6 @@ import 'dotenv/config';
 import Document from '../models/Document.js';
 import DocumentMember from '../models/DocumentMember.js';
 
-import { hocuspocusServer } from '../hocuspocus-server.js'
 import { authMiddleware } from '../middleware/auth.js';
 import mongoose from "mongoose";
 import CryptoJS from 'crypto-js';

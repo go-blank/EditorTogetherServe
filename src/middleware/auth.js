@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
-
+import User from '../models/user.js'
 
 
 export function signToken(payload) {
@@ -11,7 +11,6 @@ export function signToken(payload) {
 
 export function verifyToken(token) {
   const decoded = jwt.verify(token, JWT_SECRET);
-  console.log("aaaaaaaaaaa", decoded)
   return {
     userId: decoded.userId || decoded.sub,
     username: decoded.username,
@@ -31,7 +30,7 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
-export function authMiddleware(req, res, next) {
+export async function authMiddleware(req, res, next) {
   try {
     // 1. 获取 token
     const token = getBearerToken(req);
@@ -42,6 +41,15 @@ export function authMiddleware(req, res, next) {
       });
     }
     const decoded = verifyToken(token);
+
+    const user = await User.findById({ _id: decoded.userId })
+    if (!user) {
+      return res.status(401).json({
+        error: "用户不存在或已被删除",
+        code: "USER_NOT_FOUND"
+      });
+    }
+
     req.user = decoded;
 
     next();
