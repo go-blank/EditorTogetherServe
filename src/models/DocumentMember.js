@@ -15,6 +15,9 @@ const documentMemberSchema = new mongoose.Schema({
     index: true                            // 添加索引，便于按用户查询文档列表
   },
   username: { type: String, required: true },
+  user_role: { type: String, required: true },
+  read: { type: Boolean, required: true, default: true },
+  write: { type: Boolean, required: true, default: true },
   joined_at: {
     type: Date,
     default: Date.now

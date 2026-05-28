@@ -44,6 +44,12 @@ const hocuspocusServer = new Server({
             return;
           }
 
+          // 防御：只读用户的变更不持久化
+          if (lastContext?.canWrite === false) {
+            console.log(`只读用户的变更不持久化`);
+            return;
+          }
+
           await Document.findByIdAndUpdate(
             documentName,
             {
@@ -127,27 +133,28 @@ const hocuspocusServer = new Server({
     return data;
   },
 
-  onChange: async (data) => {
-    const { documentName, context } = data;
-
-    const user = context.user;
-    if (!user) return;
-
-    debouncedUpdate(documentName, user);
-  },
-
   // 用户连接时的自定义处理
   onConnect: async (data) => {
     const { documentName, context } = data
     console.log("用户", context.user?.username, "已连接上", documentName)
+
     const ifExists = await Document.findOne({
       _id: documentName,
-      status: { $ne: 'deleted' } // 不等于 deleted
+      status: { $ne: 'deleted' }
     });
 
     if (!ifExists) {
       return Promise.reject('文档已被删除')
     }
+
+    // 查询当前用户对此文档的操作权限
+    const member = await DocumentMember.findOne({
+      document_id: documentName,
+      user_id: context.user?.userId
+    });
+    context.canWrite = member ? member.write : false;
+    console.log(`用户 ${context.user?.username} 的写入权限: ${context.canWrite}`);
+
     return data;
   },
 
@@ -155,6 +162,21 @@ const hocuspocusServer = new Server({
   onDisconnect: async (data) => {
     const { context } = data;
     console.log(`用户 ${context.user?.username} 已断开`);
+  },
+
+  onChange: async (data) => {
+    const { documentName, context } = data;
+
+    const user = context.user;
+    if (!user) return;
+
+    // 无写入权限则不处理变更
+    if (context.canWrite === false) {
+      console.log(`只读用户 ${user.username} 的变更已被忽略`);
+      return;
+    }
+
+    debouncedUpdate(documentName, user);
   },
 
   // 配置心跳间隔（保持连接）

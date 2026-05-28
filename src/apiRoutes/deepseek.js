@@ -19,28 +19,34 @@ function deepseekChat(content) {
       //   { role: 'system', content: '你是一个有用的助手' },
       //   { role: 'user', content: '你好，请介绍一下你自己' }
       // ]
-      messages: content
+      messages: content,
+      stream: true
     })
   })
-    .then(response => response.json())
-    .then(data => data)
-    .catch(error => console.error('Error:', error));
+
 }
 
 export function deepSeekApiRouter() {
   router.post('/deepSeek/chat', authMiddleware, async (req, res) => {
 
-    const content = req.body.messages
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
 
-    console.log("content的内容是", content)
+    const content = req.body.messages
 
     const resAi = await deepseekChat(content)
 
-    res.json({
-      code: 200,
-      message: 'ai对话成功',
-      data: resAi
-    });
+    const reader = resAi.body.getReader()
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      res.write(value)
+    }
+
+    res.end()
 
   })
 

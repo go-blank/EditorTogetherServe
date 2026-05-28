@@ -59,7 +59,8 @@ export function createDocumentApiRouter() {
         document_id: documentId,
         title,
         user_id: userId,
-        username
+        username,
+        user_role: 'creator'
       });
       await member.save();
 
@@ -199,7 +200,7 @@ export function createDocumentApiRouter() {
     }
   });
 
-//恢复回收站文档
+  //恢复回收站文档
   router.put('/Restoredocuments/:id', authMiddleware, async (req, res) => {
     try {
       const { id } = req.params;
@@ -260,7 +261,7 @@ export function createDocumentApiRouter() {
       const { id } = req.params;
       const { userId, username } = req.user
 
-      const {document_id,title} = decrypt(id)
+      const { document_id, title } = decrypt(id)
 
       console.log("文档id是", document_id)
 
@@ -280,6 +281,7 @@ export function createDocumentApiRouter() {
         title,
         user_id: userId,
         username,
+        user_role: 'member'
       });
 
       await member.save();
@@ -340,27 +342,130 @@ export function createDocumentApiRouter() {
       });
 
       if (!hasAccess) {
-        return res.status(403).json({ code: 403, error: 'No permission' });
+        return res.status(403).json({ code: 403, error: '当前用户无权限' });
       }
 
-      const members = await DocumentMember.find({ document_id: id })
-        .populate('user_id', 'username email role department');
+      const members = await DocumentMember.find({
+        document_id: id,
+        user_role: { $ne: "creator" } // 直接过滤！
+      })
+        .populate('user_id', 'username email read write');
 
       res.json({
         code: 200,
         data: members.map(m => ({
           user_id: m.user_id._id,
           username: m.user_id.username,
-          email: m.user_id.email,
-          role: m.user_id.role,
-          department: m.user_id.department,
-          joined_at: m.joined_at
+          readPerm:m.read,
+          writePerm:m.write
         }))
       });
     } catch (error) {
       res.status(500).json({ code: 500, error: error.message });
     }
   });
+
+
+  // ========== 获取操作者的文档列表 ==========
+  router.get('/GETdocumentsListCreator', authMiddleware, async (req, res) => {
+    try {
+      const { userId, username } = req.user;
+      const { workspace_id, status = 'active', currentPage = 1, pageSize = 10 } = req.query;
+
+      // 查询用户有权限的文档
+      const members = await DocumentMember.find({ user_id: userId, user_role: 'creator' })
+        .populate('document_id');
+
+      let documents = members
+        .map(m => m.document_id)
+        .filter(doc => doc && doc.status === status);
+
+      if (workspace_id) {
+        documents = documents.filter(doc => doc.workspace_id == workspace_id);
+      }
+
+      // 分页
+      const start = (currentPage - 1) * pageSize;
+      const paginatedDocs = documents.slice(start, start + pageSize);
+
+      res.json({
+        code: 200,
+        data: {
+          documents: paginatedDocs.map(doc => ({
+            id: doc._id,
+            title: doc.title,
+            workspace_id: doc.workspace_id,
+            updated_by_name: doc.updated_by_name,
+            updated_at: doc.updated_at,
+            created_by_name: doc.created_by_name,
+            created_at: doc.created_at,
+          })),
+          total: documents.length,
+          currentPage,
+          pageSize
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ code: 500, error: error.message });
+    }
+  });
+
+  // ========== 获取当前用户对文档的操作权限 ==========
+  router.get('/GetDocumentMemberPermission/:id', authMiddleware, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+
+      const member = await DocumentMember.findOne({
+        document_id: id,
+        user_id: userId
+      });
+
+      if (!member) {
+        return res.status(403).json({ code: 403, error: '你不是该文档成员' });
+      }
+
+      res.json({
+        code: 200,
+        data: {
+          read: member.read,
+          write: member.write
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ code: 500, error: error.message });
+    }
+  });
+
+  router.post('/updateManageRule', authMiddleware, async (req, res) => {
+    try {
+      const { read, write, documentId , userId} = req.body
+
+      // 构建要更新的字段（read 固定为 true，不允许前端修改）
+      const updateFields = { write };
+
+      if (read !== undefined) {
+        // 即使前端传了 read 也强制设为 true
+        updateFields.read = true;
+      }
+
+      // 更新文档成员的权限
+      const result = await DocumentMember.updateOne(
+        { user_id: userId, document_id: documentId },
+        { $set: updateFields }
+      );
+
+      res.json({
+        success: true,
+        message: '更新成功',
+        data: result
+      });
+    }
+    catch (error) {
+      res.status(500).json({ code: 500, error: error.message });
+    }
+
+  })
 
   return router
 }
