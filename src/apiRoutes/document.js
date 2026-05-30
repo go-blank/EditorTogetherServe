@@ -4,8 +4,10 @@ import 'dotenv/config';
 
 import Document from '../models/Document.js';
 import DocumentMember from '../models/DocumentMember.js';
+import Notification from '../models/Notification.js';
 
 import { authMiddleware } from '../middleware/auth.js';
+import { notificationService } from '../services/notificationService.js';
 import mongoose from "mongoose";
 import CryptoJS from 'crypto-js';
 // import puppeteer from 'puppeteer';
@@ -92,7 +94,7 @@ export function createDocumentApiRouter() {
   router.get('/GETdocumentsList', authMiddleware, async (req, res) => {
     try {
       const { userId, username } = req.user;
-      const { workspace_id, status = 'active', currentPage = 1, pageSize = 10 } = req.query;
+      const { workspace_id, status = 'active', currentPage = 1, pageSize = 10, title, created_by_name, updated_by_name } = req.query;
 
       // 查询用户有权限的文档
       const members = await DocumentMember.find({ user_id: userId })
@@ -101,6 +103,24 @@ export function createDocumentApiRouter() {
       let documents = members
         .map(m => m.document_id)
         .filter(doc => doc && doc.status === status);
+
+      // 按文档名称模糊搜索
+      if (title) {
+        const keyword = title.toLowerCase();
+        documents = documents.filter(doc => doc.title.toLowerCase().includes(keyword));
+      }
+
+      // 按创始人搜索
+      if (created_by_name) {
+        const keyword = created_by_name.toLowerCase();
+        documents = documents.filter(doc => doc.created_by_name && doc.created_by_name.toLowerCase().includes(keyword));
+      }
+
+      // 按更新人搜索
+      if (updated_by_name) {
+        const keyword = updated_by_name.toLowerCase();
+        documents = documents.filter(doc => doc.updated_by_name && doc.updated_by_name.toLowerCase().includes(keyword));
+      }
 
       if (workspace_id) {
         documents = documents.filter(doc => doc.workspace_id == workspace_id);
@@ -189,7 +209,38 @@ export function createDocumentApiRouter() {
       await document.save();
 
       // 注意：Hocuspocus 中的数据不会立即删除，可以保留用于恢复
-      // 如果需要彻底删除，可以调用 hocuspocusServer.destroyDocument(id)
+
+      // ========== 生成消息通知 ==========
+      try {
+        const members = await DocumentMember.find({
+          document_id: id,
+          user_id: { $ne: userId }
+        });
+
+        if (members.length > 0) {
+          const notifications = members.map(m => ({
+            userId: m.user_id,
+            docId: id,
+            docName: document.title,
+            action: 'Rdelete',
+            operatorName: req.user.username,
+            createdAt: new Date()
+          }));
+
+          const savedNotifications = await Notification.insertMany(notifications);
+
+          // WebSocket 实时推送
+          savedNotifications.forEach((notif, idx) => {
+            notificationService.sendToUser(
+              members[idx].user_id.toString(),
+              { type: 'NEW_NOTIFICATION', data: notif.toObject() }
+            );
+          });
+        }
+      } catch (notifError) {
+        console.error('生成软删除通知失败:', notifError.message);
+        // 通知失败不阻塞主流程
+      }
 
       res.json({
         code: 200,
@@ -214,8 +265,35 @@ export function createDocumentApiRouter() {
       document.status = 'active';
       await document.save();
 
-      // 注意：Hocuspocus 中的数据不会立即删除，可以保留用于恢复
-      // 如果需要彻底删除，可以调用 hocuspocusServer.destroyDocument(id)
+      // ========== 生成恢复通知 ==========
+      try {
+        const members = await DocumentMember.find({
+          document_id: id,
+          user_id: { $ne: userId }
+        });
+
+        if (members.length > 0) {
+          const notifications = members.map(m => ({
+            userId: m.user_id,
+            docId: id,
+            docName: document.title,
+            action: 'restore',
+            operatorName: req.user.username,
+            createdAt: new Date()
+          }));
+
+          const savedNotifications = await Notification.insertMany(notifications);
+
+          savedNotifications.forEach((notif, idx) => {
+            notificationService.sendToUser(
+              members[idx].user_id.toString(),
+              { type: 'NEW_NOTIFICATION', data: notif.toObject() }
+            );
+          });
+        }
+      } catch (notifError) {
+        console.error('生成恢复通知失败:', notifError.message);
+      }
 
       res.json({
         code: 200,
@@ -242,9 +320,42 @@ export function createDocumentApiRouter() {
         return res.status(403).json({ code: 403, error: '只有创建者可以删除文档' });
       }
 
-      // 删除数据库记录
+      // 删除数据库记录前，先获取文档标题和成员列表（用于通知）
+      const docTitle = document.title;
+
       await Document.findByIdAndDelete(id);
+      // 获取所有成员（排除创建者自己）以发送通知
+      const members = await DocumentMember.find({
+        document_id: id,
+        user_id: { $ne: userId }
+      });
+
       await DocumentMember.deleteMany({ document_id: id });
+
+      // ========== 生成彻底删除通知 ==========
+      try {
+        if (members.length > 0) {
+          const notifications = members.map(m => ({
+            userId: m.user_id,
+            docId: id,
+            docName: docTitle,
+            action: 'Cdelete',
+            operatorName: req.user.username,
+            createdAt: new Date()
+          }));
+
+          const savedNotifications = await Notification.insertMany(notifications);
+
+          savedNotifications.forEach((notif, idx) => {
+            notificationService.sendToUser(
+              members[idx].user_id.toString(),
+              { type: 'NEW_NOTIFICATION', data: notif.toObject() }
+            );
+          });
+        }
+      } catch (notifError) {
+        console.error('生成彻底删除通知失败:', notifError.message);
+      }
 
       res.json({
         code: 200,

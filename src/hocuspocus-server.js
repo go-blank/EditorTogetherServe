@@ -50,16 +50,22 @@ const hocuspocusServer = new Server({
             return;
           }
 
+          // 修正：lastContext.userId → lastContext.user?.userId
+          const userId = lastContext?.user?.userId;
+          const username = lastContext?.user?.username;
+
           await Document.findByIdAndUpdate(
             documentName,
             {
-              yjs_data: state,
+              yjs_data: Buffer.from(state),
               updated_at: Date.now(),
-              updated_by: lastContext.userId,
-              updated_by_name: lastContext.username
+              updated_by: userId,
+              updated_by_name: username
             },
             { upsert: true }
           );
+
+          console.log(`[保存] 文档 ${documentName} 保存成功`);
         } catch (error) {
           console.error(`写入文档 ${documentName}失败:`, error);
         }
@@ -70,14 +76,18 @@ const hocuspocusServer = new Server({
 
   onAuthenticate: async (data) => {
 
-    const { token, context } = data;
-    console.log("拿到的token是", token)
-
+    const { token,context ,documentName} = data;
     const user = verifyToken(token);
     if (!user) {
-      connectionConfig.readOnly = true;
       throw new Error('无效token');
     }
+
+    // 查询当前用户对此文档的操作权限
+    const member = await DocumentMember.findOne({
+      document_id: documentName,
+      user_id: user?.userId
+    });
+    context.canWrite = member ? member.write : false;
     return {
       user
     }
@@ -85,16 +95,11 @@ const hocuspocusServer = new Server({
 
   // 文档加载前的钩子 - 验证权限
   onLoadDocument: async (data) => {
-    console.log("用户开始加载文档")
-
     const { documentName, context } = data;
-    console.log("context", context.user)
-    console.log("documentName", documentName)
-    // documentName 就是你的 documentId
     const documentId = documentName;
     const userId = context.user?.userId;
 
-    console.log(`用户 ${context.user?.username} 尝试加载文档 ${documentId}`);
+    // console.log(`用户 ${context.user?.username} 尝试加载文档 ${documentId}`);
 
     return data;  // 继续加载文档
   },
@@ -113,21 +118,6 @@ const hocuspocusServer = new Server({
     if (!document) {
       // 这种情况理论上不应该发生，因为应该先调用 API 创建
       console.warn(`文档 ${documentId} 在数据库中不存在，但 WebSocket 尝试连接`);
-
-      // 可以选择自动创建（备选方案）
-      // const newDoc = new Document({
-      //   _id: documentId,
-      //   title: '新文档',
-      //   created_by: userId,
-      //   workspace_id: 'default'
-      // });
-      // await newDoc.save();
-      // 
-      // const member = new DocumentMember({
-      //   document_id: documentId,
-      //   user_id: userId
-      // });
-      // await member.save();
     }
 
     return data;
@@ -135,9 +125,7 @@ const hocuspocusServer = new Server({
 
   // 用户连接时的自定义处理
   onConnect: async (data) => {
-    const { documentName, context } = data
-    console.log("用户", context.user?.username, "已连接上", documentName)
-
+    const { documentName } = data
     const ifExists = await Document.findOne({
       _id: documentName,
       status: { $ne: 'deleted' }
@@ -146,15 +134,6 @@ const hocuspocusServer = new Server({
     if (!ifExists) {
       return Promise.reject('文档已被删除')
     }
-
-    // 查询当前用户对此文档的操作权限
-    const member = await DocumentMember.findOne({
-      document_id: documentName,
-      user_id: context.user?.userId
-    });
-    context.canWrite = member ? member.write : false;
-    console.log(`用户 ${context.user?.username} 的写入权限: ${context.canWrite}`);
-
     return data;
   },
 

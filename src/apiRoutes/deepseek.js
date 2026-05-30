@@ -2,6 +2,7 @@
 import express from 'express';
 import 'dotenv/config';
 import { authMiddleware } from '../middleware/auth.js';
+import { SYSTEM_PROMPT } from '../services/systemPrompt.js';
 
 const router = express.Router();
 
@@ -33,9 +34,14 @@ export function deepSeekApiRouter() {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    const content = req.body.messages
+    // 注入系统知识作为 system prompt
+    const userMessages = req.body.messages || []
+    const messagesWithContext = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...userMessages
+    ]
 
-    const resAi = await deepseekChat(content)
+    const resAi = await deepseekChat(messagesWithContext)
 
     const reader = resAi.body.getReader()
 

@@ -7,6 +7,9 @@ import { setupWebSocket } from './hocuspocus-server.js';
 import { createUserApiRouter } from "./apiRoutes/user.js";
 import { createDocumentApiRouter } from "./apiRoutes/document.js"
 import { deepSeekApiRouter } from "./apiRoutes/deepseek.js"
+import { createNotificationApiRouter } from "./apiRoutes/notification.js"
+import { createExportApiRouter } from "./apiRoutes/export.js"
+import { notificationService } from "./services/notificationService.js"
 
 // 环境变量配置
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -27,7 +30,7 @@ function createRequestId() {
 
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use((req, res, next) => {
   req.id = createRequestId();
   res.setHeader("X-Request-Id", req.id);
@@ -42,7 +45,9 @@ app.use(
 app.use("/api", [
   createUserApiRouter(),
   createDocumentApiRouter(),
-  deepSeekApiRouter()
+  deepSeekApiRouter(),
+  createNotificationApiRouter(),
+  createExportApiRouter()
 ]);
 
 // 404 handler (JSON)
@@ -60,7 +65,11 @@ const server = http.createServer(app);
 
 setupWebSocket();
 
+// 初始化通知 WebSocket（附着在 Express HTTP 服务器上）
+notificationService.init(server); 
+
 server.listen(PORT, () => {
   log(`Server listening on http://localhost:${PORT}`);
   log(`WebSocket endpoint ws://localhost:${PORT}/ws?roomId=xxx&token=xxx`);
+  log(`Notification WebSocket ws://localhost:${PORT}/ws/notifications?token=xxx`);
 });
